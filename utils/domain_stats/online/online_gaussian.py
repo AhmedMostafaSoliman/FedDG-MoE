@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-class DomainStatisticsTracker:
+class OnlineGaussianTracker:
     def __init__(self, feature_dim, num_domains):
         """Initialize domain statistics tracker"""
         self.feature_dim = feature_dim

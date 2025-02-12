@@ -9,8 +9,36 @@ from utils.fed_merge import Cal_Weight_Dict, FedAvg, FedUpdate
 from utils.trainval_func import site_evaluation, feddgmoe_site_train, feddgmoe_testsite_eval_sample, feddgmoe_testsite_eval_batch, GetFedModel, SaveCheckPoint
 import torch.nn.functional as F
 from tqdm import tqdm
-from utils.domain_stats import DomainStatisticsTracker
 import torch
+
+from utils.domain_stats.online_cosine import OnlineCosineTracker
+from utils.domain_stats.online_gmm import OnlineGMMTracker
+from utils.domain_stats.online_gaussian import OnlineGaussianTracker
+
+from utils.domain_stats.offline.offline_gmm import OfflineGMMTracker
+
+def collect_online_stats(model, dataloader, domain_stats, domain_id):
+    """
+    Collect online statistics for a domain using the provided dataloader.
+    Note: online collection saves memory (no need to store all features at once).
+    """
+    with torch.no_grad():
+        for inputs, _, _ in dataloader:
+            features = model(inputs.cuda)
+            domain_stats.update(features, domain_id)
+
+def collect_offline_stats(model, dataloader, domain_stats, domain_id):
+    """
+    Collect offline statistics for a domain. Refits from scratch.
+    """
+    all_features = []
+    with torch.no_grad():
+        for inputs, _, _ in dataloader:
+            features = model(inputs.cuda())
+            all_features.append(features)
+    all_features = torch.cat(all_features, dim=0)
+    domain_stats.refit(all_features, domain_id)  # Call the refit method
+
 
 def get_argparse():
     parser = argparse.ArgumentParser()
@@ -21,11 +49,14 @@ def get_argparse():
                         choices=['p', 'a', 'c', 'r'], help='the domain name for testing')
     parser.add_argument('--num_classes', help='number of classes default 7', type=int, default=65)
     parser.add_argument('--batch_size', help='batch_size', type=int, default=16)
+    parser.add_argument('--test_batch_size', help='test_batch_size', type=int, default=16)
     parser.add_argument('--local_epochs', help='epochs number', type=int, default=5)
     parser.add_argument('--comm', help='epochs number', type=int, default=40)
     parser.add_argument('--lr', help='learning rate', type=float, default=0.001)
     parser.add_argument("--lr_policy", type=str, default='step', choices=['step'],
                         help="learning rate scheduler policy")
+    parser.add_argument('--domain_stats', help='Which domain stats tracker to use', type=str, default='gmm')
+    parser.add_argument('--collection_strategy', help='Stats collection strategy', type=str, default='online')
     parser.add_argument('--note', help='note of experimental settings', type=str, default='fedavg')
     parser.add_argument('--display', help='display in controller', action='store_true')
     return parser.parse_args()
@@ -40,7 +71,7 @@ def main():
     Save_Hyperparameter(log_dir, args)
     
     '''dataset and dataloader'''
-    dataobj = OfficeHome_FedDG(test_domain=args.test_domain, batch_size=args.batch_size)
+    dataobj = OfficeHome_FedDG(test_domain=args.test_domain, batch_size=args.batch_size, test_batch_size=args.test_batch_size)
     dataloader_dict, dataset_dict = dataobj.GetData()
         
     '''model'''
@@ -48,9 +79,25 @@ def main():
     global_model, model_dict, optimizer_dict, scheduler_dict = GetFedModel(args, args.num_classes)
     weight_dict = Cal_Weight_Dict(dataset_dict, site_list=dataobj.train_domain_list)
 
-    ''' domain stats tracker'''
+    ''' Domain Statistics Tracking'''
     # todo get feature level from the GetFedModel
-    domain_stats = DomainStatisticsTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
+    if args.domain_stats == 'online_gaussian':
+        domain_stats = OnlineGaussianTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
+        log_file.info('Using Online Gaussian Tracker')
+    elif args.domain_stats == 'online_cosine':
+        domain_stats = OnlineCosineTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
+        log_file.info('Using Online Cosine Tracker')
+    elif args.domain_stats == 'online_gmm':
+        domain_stats = OnlineGMMTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
+        log_file.info('Using Online GMM Tracker')
+    elif args.domain_stats == 'offline_gmm':
+        domain_stats = OfflineGMMTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
+        log_file.info('Using Offline GMM Tracker')
+
+    if args.collection_strategy == 'offline':
+        collect_stats = collect_offline_stats
+    elif args.collection_strategy == 'online': 
+        collect_stats = collect_online_stats
 
     FedUpdate(model_dict, global_model)
     best_val = 0.
@@ -61,11 +108,8 @@ def main():
             feddgmoe_site_train(i, domain_name, args, model_dict[domain_name], optimizer_dict[domain_name], 
                        scheduler_dict[domain_name], dataloader_dict[domain_name]['train'], log_ten, metric)
             
-            # Update Domain [i] Statistics 
-            with torch.no_grad():
-                for inputs, _, _ in dataloader_dict[domain_name]['train']:
-                    features = model_dict[domain_name][0](inputs.cuda())
-                    domain_stats.update(features, domain_id)
+            # Update Domain [i] Statistics
+            collect_stats(model_dict[domain_name], dataloader_dict[domain_name]['train'], domain_stats, domain_id)
 
             # Val Domain[i]
             site_evaluation(i, domain_name, args, model_dict[domain_name], dataloader_dict[domain_name]['val'], log_file, log_ten, metric, note='before_fed')

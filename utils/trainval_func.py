@@ -191,7 +191,7 @@ def GetFedModel(args, num_classes, is_train=True):
             scheduler_dict[domain_name] = torch.optim.lr_scheduler.ExponentialLR(optimizer_dict[domain_name], gamma=0.99)   
         elif args.lr_policy == 'cos':
             scheduler_dict[domain_name] = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_dict[domain_name], T_max=total_epochs)
-            
+    
     return global_model, model_dict, optimizer_dict, scheduler_dict
 
 def SaveCheckPoint(args, model, epochs, path, optimizer=None, schedule=None, note='best_val'):
