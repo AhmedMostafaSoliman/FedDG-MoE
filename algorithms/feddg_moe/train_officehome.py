@@ -11,9 +11,9 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import torch
 
-from utils.domain_stats.online_cosine import OnlineCosineTracker
-from utils.domain_stats.online_gmm import OnlineGMMTracker
-from utils.domain_stats.online_gaussian import OnlineGaussianTracker
+from utils.domain_stats.online.online_cosine import OnlineCosineTracker
+from utils.domain_stats.online.online_gmm import OnlineGMMTracker
+from utils.domain_stats.online.online_gaussian import OnlineGaussianTracker
 
 from utils.domain_stats.offline.offline_gmm import OfflineGMMTracker
 
@@ -55,8 +55,7 @@ def get_argparse():
     parser.add_argument('--lr', help='learning rate', type=float, default=0.001)
     parser.add_argument("--lr_policy", type=str, default='step', choices=['step'],
                         help="learning rate scheduler policy")
-    parser.add_argument('--domain_stats', help='Which domain stats tracker to use', type=str, default='gmm')
-    parser.add_argument('--collection_strategy', help='Stats collection strategy', type=str, default='online')
+    parser.add_argument('--domain_tracker', help='Which domain stats tracker to use', type=str, default='gmm')
     parser.add_argument('--note', help='note of experimental settings', type=str, default='fedavg')
     parser.add_argument('--display', help='display in controller', action='store_true')
     return parser.parse_args()
@@ -81,22 +80,22 @@ def main():
 
     ''' Domain Statistics Tracking'''
     # todo get feature level from the GetFedModel
-    if args.domain_stats == 'online_gaussian':
+    if args.domain_tracker == 'online_gaussian':
         domain_stats = OnlineGaussianTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
         log_file.info('Using Online Gaussian Tracker')
-    elif args.domain_stats == 'online_cosine':
+    elif args.domain_tracker == 'online_cosine':
         domain_stats = OnlineCosineTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
         log_file.info('Using Online Cosine Tracker')
-    elif args.domain_stats == 'online_gmm':
+    elif args.domain_tracker == 'online_gmm':
         domain_stats = OnlineGMMTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
         log_file.info('Using Online GMM Tracker')
-    elif args.domain_stats == 'offline_gmm':
+    elif args.domain_tracker == 'offline_gmm':
         domain_stats = OfflineGMMTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
         log_file.info('Using Offline GMM Tracker')
 
-    if args.collection_strategy == 'offline':
+    if 'offline_' in args.domain_tracker:
         collect_stats = collect_offline_stats
-    elif args.collection_strategy == 'online': 
+    elif 'online_' in args.domain_tracker: 
         collect_stats = collect_online_stats
 
     FedUpdate(model_dict, global_model)
