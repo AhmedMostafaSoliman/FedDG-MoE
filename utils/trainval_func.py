@@ -123,6 +123,12 @@ def feddgmoe_testsite_eval_batch(epochs, site_name, args, model, dataloader, log
     log_file.info(f'{note} Round: {epochs:3d} | Epochs: {args.local_epochs*epochs:3d} | Domain: {site_name} | loss: {results_dict["loss"]:.4f} | Acc: {results_dict["acc"]*100:.2f}%')
     return results_dict
 
+def feddgmoe_site_train(comm_rounds, site_name, args, model, optimizer, scheduler, dataloader, log_ten, metric):
+    tbar = tqdm(range(args.local_epochs))
+    for local_epoch in tbar:
+        tbar.set_description(f'{site_name}_train')
+        feddgmoe_epoch_site_train(comm_rounds*args.local_epochs + local_epoch, site_name, model, optimizer, scheduler, dataloader, log_ten, metric)
+
 def feddgmoe_epoch_site_train(epochs, site_name, model, optimzier, scheduler, dataloader, log_ten, metric):
     model.train()
     for i, data_list in enumerate(dataloader):
