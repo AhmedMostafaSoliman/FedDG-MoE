@@ -47,7 +47,6 @@ checkpoints/
 results/
 
 # Data
-data/
 datasets/
 *.csv
 *.json
