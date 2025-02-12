@@ -10,8 +10,8 @@ trackers=(
     "offline_mahalanobis"
     "offline_cosine"
 )
-train_batch_sizes=(16 32 64)
-test_batch_sizes=(16 32 64)
+train_batch_sizes=(64 32 16)
+test_batch_sizes=(64 32 16 8 4)
 
 # Iterate over all combinations
 for domain in "${domains[@]}"; do

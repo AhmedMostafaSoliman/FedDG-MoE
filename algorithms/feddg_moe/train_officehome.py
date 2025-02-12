@@ -26,7 +26,7 @@ def collect_online_stats(model, dataloader, domain_stats, domain_id):
     """
     with torch.no_grad():
         for inputs, _, _ in dataloader:
-            features = model(inputs.cuda)
+            features = model(inputs.cuda())
             domain_stats.update(features, domain_id)
 
 def collect_offline_stats(model, dataloader, domain_stats, domain_id):
@@ -58,7 +58,7 @@ def get_argparse():
     parser.add_argument("--lr_policy", type=str, default='step', choices=['step'],
                         help="learning rate scheduler policy")
     parser.add_argument('--domain_tracker', help='Which domain stats tracker to use', type=str, default='gmm')
-    parser.add_argument('--note', help='note of experimental settings', type=str, default='fedavg')
+    parser.add_argument('--note', help='note of experimental settings', type=str, default='feddg_moe')
     parser.add_argument('--display', help='display in controller', action='store_true')
     return parser.parse_args()
 
