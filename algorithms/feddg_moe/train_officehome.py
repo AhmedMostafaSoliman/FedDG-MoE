@@ -16,6 +16,8 @@ from utils.domain_stats.online.online_gmm import OnlineGMMTracker
 from utils.domain_stats.online.online_gaussian import OnlineGaussianTracker
 
 from utils.domain_stats.offline.offline_gmm import OfflineGMMTracker
+from utils.domain_stats.offline.offline_mahalanobis import OfflineMahalanobisTracker
+from utils.domain_stats.offline.offline_cosine import OfflineCosineTracker
 
 def collect_online_stats(model, dataloader, domain_stats, domain_id):
     """
@@ -92,6 +94,15 @@ def main():
     elif args.domain_tracker == 'offline_gmm':
         domain_stats = OfflineGMMTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
         log_file.info('Using Offline GMM Tracker')
+    elif args.domain_tracker == 'offline_mahalanobis':
+        domain_stats = OfflineMahalanobisTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
+        log_file.info('Using Offline Mahalanobis Tracker')
+    elif args.domain_tracker == 'offline_cosine':
+        domain_stats = OfflineCosineTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
+        log_file.info('Using Offline Cosine Tracker')
+    else:
+        raise ValueError(f"Unknown domain tracker: {args.domain_tracker}")
+
 
     if 'offline_' in args.domain_tracker:
         collect_stats = collect_offline_stats
@@ -108,7 +119,7 @@ def main():
                        scheduler_dict[domain_name], dataloader_dict[domain_name]['train'], log_ten, metric)
             
             # Update Domain [i] Statistics
-            collect_stats(model_dict[domain_name], dataloader_dict[domain_name]['train'], domain_stats, domain_id)
+            collect_stats(model_dict[domain_name][0], dataloader_dict[domain_name]['train'], domain_stats, domain_id)
 
             # Val Domain[i]
             site_evaluation(i, domain_name, args, model_dict[domain_name], dataloader_dict[domain_name]['val'], log_file, log_ten, metric, note='before_fed')
