@@ -6,7 +6,7 @@ from data.officehome_dataset import OfficeHome_FedDG
 from utils.classification_metric import Classification 
 from utils.log_utils import *
 from utils.fed_merge import Cal_Weight_Dict, FedAvg, FedUpdate
-from utils.trainval_func import site_evaluation, site_train, feddgmoe_testsite_eval_sample, feddgmoe_testsite_eval_batch, GetFedModel, SaveCheckPoint
+from utils.trainval_func import site_evaluation, feddgmoe_epoch_site_train, feddgmoe_testsite_eval_sample, feddgmoe_testsite_eval_batch, GetFedModel, SaveCheckPoint
 import torch.nn.functional as F
 from tqdm import tqdm
 from utils.domain_stats import DomainStatisticsTracker
@@ -60,7 +60,7 @@ def main():
         FedUpdate(model_dict, global_model)
         for domain_id, domain_name in enumerate(dataobj.train_domain_list):
             # Train Domain[i]
-            site_train(i, domain_name, args, model_dict[domain_name], optimizer_dict[domain_name], 
+            feddgmoe_epoch_site_train(i, domain_name, args, model_dict[domain_name], optimizer_dict[domain_name], 
                        scheduler_dict[domain_name], dataloader_dict[domain_name]['train'], log_ten, metric)
             
             # Update Domain [i] Statistics 

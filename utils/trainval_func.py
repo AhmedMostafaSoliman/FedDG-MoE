@@ -123,6 +123,34 @@ def feddgmoe_testsite_eval_batch(epochs, site_name, args, model, dataloader, log
     log_file.info(f'{note} Round: {epochs:3d} | Epochs: {args.local_epochs*epochs:3d} | Domain: {site_name} | loss: {results_dict["loss"]:.4f} | Acc: {results_dict["acc"]*100:.2f}%')
     return results_dict
 
+def feddgmoe_epoch_site_train(epochs, site_name, model, optimzier, scheduler, dataloader, log_ten, metric):
+    model.train()
+    for i, data_list in enumerate(dataloader):
+        imgs, labels, domain_labels = data_list
+        imgs = imgs.cuda()
+        labels = labels.cuda()
+        domain_labels = domain_labels.cuda()
+        optimzier.zero_grad()
+        output = model(imgs)
+        loss = F.cross_entropy(output, labels)
+        ########### Calc Aux Loss ##############
+        loss_aux = 0
+        loss_aux_list = []
+        for n, m in model.named_modules():
+            if hasattr(m, 'aux_loss'):
+                loss_aux_list.append(m.aux_loss)
+        for layer_loss in loss_aux_list:
+            loss_aux += layer_loss
+        ########################################
+        loss += loss_aux
+        loss.backward()
+        optimzier.step()
+        log_ten.add_scalar(f'{site_name}_train_loss', loss.item(), epochs*len(dataloader)+i)
+        metric.update(output, labels)
+    
+    log_ten.add_scalar(f'{site_name}_train_acc', metric.results()['acc'], epochs)
+    scheduler.step()
+
 def GetFedModel(args, num_classes, is_train=True):
     global_model, feature_level = GetNetwork(args, args.num_classes, True)
     global_model = global_model.cuda()
