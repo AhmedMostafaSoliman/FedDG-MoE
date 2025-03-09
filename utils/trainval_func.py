@@ -123,6 +123,64 @@ def feddgmoe_testsite_eval_batch(epochs, site_name, args, model, dataloader, log
     log_file.info(f'{note} Round: {epochs:3d} | Epochs: {args.local_epochs*epochs:3d} | Domain: {site_name} | loss: {results_dict["loss"]:.4f} | Acc: {results_dict["acc"]*100:.2f}%')
     return results_dict
 
+def fedexpmerge_testsite_eval(epochs, site_name, args, model, dataloader, log_file, log_ten, metric, note='after_fed', model_dict=None, domain_stats=None):
+    model.eval()
+    with torch.no_grad():
+        for imgs, labels, domain_labels, in tqdm(dataloader):
+            imgs = imgs.cuda()
+            intermediate_features = model[0](imgs)
+            train_domains = [domain_name for domain_name in model_dict.keys() if domain_name != site_name]
+            for train_domain in train_domains:
+                for name, param in model.named_parameters():
+                    if param.requires_grad:                            
+                        NewParam = sum(w * model_dict[train_domain].state_dict()[name] for w in batch_similarities)
+                        param.data.copy_(NewParam)
+            out = model(imgs)
+            metric.update(out, labels)
+    results_dict = metric.results()
+    log_ten.add_scalar(f'{note}_{site_name}_loss', results_dict['loss'], epochs)
+    log_ten.add_scalar(f'{note}_{site_name}_acc', results_dict['acc'], epochs)
+    log_file.info(f'{note} Round: {epochs:3d} | Epochs: {args.local_epochs*epochs:3d} | Domain: {site_name} | loss: {results_dict["loss"]:.4f} | Acc: {results_dict["acc"]*100:.2f}%')
+    return results_dict
+
+def feddgmoe_testsite_eval_batch_v2(epochs, site_name, args, model, dataloader, log_file, log_ten, metric, note='after_fed', model_dict=None, domain_stats=None):
+    model.eval()
+    with torch.no_grad():
+        for imgs, labels, domain_labels, in tqdm(dataloader):
+            imgs = imgs.cuda()
+            #intermediate_features = model[0](imgs)
+            intermediate_features = model[0].get_intermediate_layers(imgs, n=4,
+            return_prefix_tokens=True, norm=True)
+        
+            averaged_layers = []
+            for spatial_tokens, prefix_tokens in intermediate_features:
+                all_tokens = torch.cat([prefix_tokens, spatial_tokens], dim=1)
+                #averaged_layers.append(all_tokens.mean(dim=1))
+                averaged_layers.append(all_tokens)        
+            intermediate_features = torch.stack(averaged_layers).mean(dim=0) #[batch_size, embed_dim]
+            ################################################################
+            #average feats on the batch dim
+            batch_averaged_features = torch.mean(intermediate_features, dim=0).unsqueeze(0)
+            print(f"Batch Averaged Feature shape: {batch_averaged_features.shape}")
+            similarities = domain_stats.get_domain_weights(batch_averaged_features)
+            print(f"Similarities shape: {similarities.shape}")
+            batch_similarities = torch.mean(similarities, dim=0)
+            # log batch similarities
+            log_file.info(f'{note}_{site_name}_batch_similarities: {batch_similarities} (epoch {epochs})')
+            train_domains = [domain_name for domain_name in model_dict.keys() if domain_name != site_name]
+            for train_domain in train_domains:
+                for name, param in model.named_parameters():
+                    if param.requires_grad:                            
+                        NewParam = sum(w * model_dict[train_domain].state_dict()[name] for w in batch_similarities)
+                        param.data.copy_(NewParam)
+            out = model(imgs)
+            metric.update(out, labels)
+    results_dict = metric.results()
+    log_ten.add_scalar(f'{note}_{site_name}_loss', results_dict['loss'], epochs)
+    log_ten.add_scalar(f'{note}_{site_name}_acc', results_dict['acc'], epochs)
+    log_file.info(f'{note} Round: {epochs:3d} | Epochs: {args.local_epochs*epochs:3d} | Domain: {site_name} | loss: {results_dict["loss"]:.4f} | Acc: {results_dict["acc"]*100:.2f}%')
+    return results_dict
+
 def feddgmoe_site_train(comm_rounds, site_name, args, model, optimizer, scheduler, dataloader, log_ten, metric):
     tbar = tqdm(range(args.local_epochs))
     for local_epoch in tbar:
