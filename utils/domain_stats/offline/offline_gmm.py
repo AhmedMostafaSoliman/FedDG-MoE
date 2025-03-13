@@ -13,8 +13,8 @@ class OfflineGMMTracker:
         """
         self.num_domains = len(args.site_list)
         self.feature_dim = None
-        self.num_components = args.num_components
-        self.covariance_type = args.covariance_type
+        self.num_components = args.gmm_num_components
+        self.covariance_type = args.gmm_covariance_type
 
         self.gmms = None  # Will be initialized on first fit
         self.fitted = [False] * self.num_domains
