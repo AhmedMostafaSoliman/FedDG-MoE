@@ -5,6 +5,51 @@ import timm
 import torch
 
 
+def feats_extractor(x, featurizer, mul_layers=False, avg_tokens=False, num_layers=4):
+    """
+    Extract features from a featurizer, ensuring output shape is always [batch_size, feature_dim]
+    
+    Args:
+        x: Input tensor
+        featurizer: Feature extractor model
+        mul_layers: Whether to extract from multiple layers
+        avg_tokens: Whether to average token features
+        num_layers: Number of layers to extract from if mul_layers=True
+        
+    Returns:
+        Tensor of shape [batch_size, feature_dim]
+    """
+    if mul_layers:
+        intermediate_features = featurizer.get_intermediate_layers(
+            x,
+            n=num_layers,
+            return_prefix_tokens=True,
+            norm=True
+        )        
+        layers = []
+        for spatial_tokens, prefix_tokens in intermediate_features:
+            all_tokens = torch.cat([prefix_tokens, spatial_tokens], dim=1)
+            if avg_tokens:
+                # Average token dimension, preserving [batch_size, embed_dim]
+                layers.append(all_tokens.mean(dim=1))
+            else:
+                # Flatten tokens into a single feature vector per sample
+                batch_size = all_tokens.size(0)
+                layers.append(all_tokens.reshape(batch_size, -1))
+                
+        # Average across layers
+        final_features = torch.stack(layers).mean(dim=0)
+    else:
+        # Regular feature extraction
+        final_features = featurizer(x)
+    
+    # Ensure output shape is [batch_size, feature_dim]
+    batch_size = final_features.size(0)
+    final_features = final_features.reshape(batch_size, -1)
+    
+    return final_features
+
+
 class Identity(nn.Module):
     """An identity layer"""
 

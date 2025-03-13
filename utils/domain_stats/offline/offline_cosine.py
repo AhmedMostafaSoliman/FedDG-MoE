@@ -114,19 +114,18 @@ class OfflineCosineTracker:
 
 
 class OfflineCosineMuVarTracker:
-    def __init__(self, num_domains, feature_dim=None, flatten_tokens=False):
+    def __init__(self, args):
         """
         Initialize offline domain statistics tracker using cosine similarity
         with both mean and variance information.
+
+        We divide the mean by the variance to down-weight features that are not stable within a domain
         
         Args:
-            num_domains: Number of domains to track
-            feature_dim: Feature dimension (optional, will be determined from data if None)
-            flatten_tokens: Whether to flatten token-level features or average them
+            args: Arguments containing site_list for num_domains
         """
-        self.num_domains = num_domains
-        self.feature_dim = feature_dim
-        self.flatten_tokens = flatten_tokens
+        self.num_domains = len(args.site_list)
+        self.feature_dim = None  # Will be determined from first batch
         self.means = None  # Will be initialized on first fit
         self.vars = None   # Will be initialized on first fit
         self.fitted = [False] * self.num_domains  # Flag
@@ -134,43 +133,21 @@ class OfflineCosineMuVarTracker:
     def refit(self, features, domain_id):
         """
         Refit the mean (centroid) and variance from scratch.
+        Assumes features are already in shape [batch_size, feature_dim]
 
         Args:
-            features: All features for this domain, shape [batch_size, ...] or [batch_size, num_tokens, embed_dim]
+            features: All features for this domain, shape [batch_size, feature_dim]
             domain_id: Domain identifier.
         """
         with torch.no_grad():
             if not features.is_cuda:
                 features = features.cuda()
             
-            # Handle first fit - determine dimensions and initialize storage
+            # First fit - determine dimensions and initialize storage
             if self.means is None:
-                if len(features.shape) == 3 and self.flatten_tokens:
-                    # Handle token-level features with flattening
-                    batch_size, num_tokens, embed_dim = features.shape
-                    self.feature_dim = num_tokens * embed_dim
-                    features = features.reshape(batch_size, -1)
-                elif len(features.shape) == 3 and not self.flatten_tokens:
-                    # Average token embeddings
-                    batch_size, num_tokens, embed_dim = features.shape
-                    self.feature_dim = embed_dim
-                    features = features.mean(dim=1)
-                else:
-                    # Simple feature vector
-                    self.feature_dim = features.shape[1]
-                
+                self.feature_dim = features.shape[1]
                 self.means = torch.zeros(self.num_domains, self.feature_dim).cuda()
                 self.vars = torch.ones(self.num_domains, self.feature_dim).cuda()
-            
-            # Process features according to settings
-            elif len(features.shape) == 3:
-                if self.flatten_tokens:
-                    # Flatten token dimension into feature dimension
-                    batch_size, num_tokens, embed_dim = features.shape
-                    features = features.reshape(batch_size, -1)
-                else:
-                    # Average token embeddings
-                    features = features.mean(dim=1)
             
             # Calculate mean
             self.means[domain_id] = torch.mean(features, dim=0)
@@ -182,25 +159,21 @@ class OfflineCosineMuVarTracker:
 
     def get_domain_weights(self, features):
         """
-        Compute domain similarity weights considering both mean and variance.
+        Compute raw domain similarities considering both mean and variance.
         Features are normalized by the domain's standard deviation before
         computing cosine similarity.
+        
+        Args:
+            features: Input features of shape [batch_size, feature_dim]
+            
+        Returns:
+            Raw similarity scores without softmax normalization
         """
         if self.means is None:
             raise RuntimeError("Tracker not fitted. Call refit() first.")
             
         if not features.is_cuda:
             features = features.cuda()
-            
-        # Process features according to settings
-        if len(features.shape) == 3:
-            if self.flatten_tokens:
-                # Flatten token dimension into feature dimension
-                batch_size, num_tokens, embed_dim = features.shape
-                features = features.reshape(batch_size, -1)
-            else:
-                # Average token embeddings
-                features = features.mean(dim=1)
                 
         batch_size = features.size(0)
         similarities = torch.zeros(batch_size, self.num_domains).cuda()
@@ -223,8 +196,8 @@ class OfflineCosineMuVarTracker:
             else:
                 similarities[:, domain_id] = torch.zeros(batch_size).cuda()
 
-        domain_weights = torch.softmax(similarities*2, dim=1)
-        return domain_weights
+        # Return raw similarities - no softmax applied
+        return similarities
 
     def save_cosine(self, filepath):
         """Save the tracker's parameters."""
@@ -232,8 +205,7 @@ class OfflineCosineMuVarTracker:
             'means': self.means,
             'vars': self.vars,
             'fitted': self.fitted,
-            'feature_dim': self.feature_dim,
-            'flatten_tokens': self.flatten_tokens
+            'feature_dim': self.feature_dim
         }, filepath)
 
     def load_cosine(self, filepath):
@@ -243,4 +215,3 @@ class OfflineCosineMuVarTracker:
         self.vars = checkpoint['vars']
         self.fitted = checkpoint.get('fitted', [True] * self.num_domains)
         self.feature_dim = checkpoint.get('feature_dim', self.means.shape[1])
-        self.flatten_tokens = checkpoint.get('flatten_tokens', False)
