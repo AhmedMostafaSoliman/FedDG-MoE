@@ -94,24 +94,7 @@ class OfflineCosineTracker:
 
         domain_weights = torch.softmax(similarities, dim=1)
         return domain_weights
-
-    def save_cosine(self, filepath):
-        """Save the tracker's parameters."""
-        torch.save({
-            'means': self.means, 
-            'fitted': self.fitted,
-            'feature_dim': self.feature_dim,
-            'flatten_tokens': self.flatten_tokens
-        }, filepath)
-
-    def load_cosine(self, filepath):
-        """Load the tracker's parameters."""
-        checkpoint = torch.load(filepath)
-        self.means = checkpoint['means']
-        self.fitted = checkpoint['fitted']
-        self.feature_dim = checkpoint.get('feature_dim', self.means.shape[1])
-        self.flatten_tokens = checkpoint.get('flatten_tokens', False)
-
+    
 
 class OfflineCosineMuVarTracker:
     def __init__(self, args):
@@ -198,20 +181,3 @@ class OfflineCosineMuVarTracker:
 
         # Return raw similarities - no softmax applied
         return similarities
-
-    def save_cosine(self, filepath):
-        """Save the tracker's parameters."""
-        torch.save({
-            'means': self.means,
-            'vars': self.vars,
-            'fitted': self.fitted,
-            'feature_dim': self.feature_dim
-        }, filepath)
-
-    def load_cosine(self, filepath):
-        """Load the tracker's parameters."""
-        checkpoint = torch.load(filepath)
-        self.means = checkpoint['means']
-        self.vars = checkpoint['vars']
-        self.fitted = checkpoint.get('fitted', [True] * self.num_domains)
-        self.feature_dim = checkpoint.get('feature_dim', self.means.shape[1])

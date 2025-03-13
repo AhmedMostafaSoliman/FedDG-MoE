@@ -26,7 +26,7 @@ def collect_online_stats(model, dataloader, domain_stats, domain_id, args):
     """
     with torch.no_grad():
         for inputs, _, _ in dataloader:
-            features = feats_extractor(inputs.cuda(), model, mul_layers=args.mul_layers, avg_tokens=args.avg_tokens, num_layers=args.num_layers)
+            features = feats_extractor(inputs.cuda(), model, avg_tokens=args.avg_tokens, num_layers=args.num_layers)
             domain_stats.update(features, domain_id)
 
 def collect_offline_stats(model, dataloader, domain_stats, domain_id, args):
@@ -36,7 +36,7 @@ def collect_offline_stats(model, dataloader, domain_stats, domain_id, args):
     all_features = []
     with torch.no_grad():
         for inputs, _, _ in dataloader:
-            features = feats_extractor(inputs.cuda(), model, mul_layers=args.mul_layers, avg_tokens=args.avg_tokens, num_layers=args.num_layers)
+            features = feats_extractor(inputs.cuda(), model, avg_tokens=args.avg_tokens, num_layers=args.num_layers)
             all_features.append(features)
     all_features = torch.cat(all_features, dim=0)
     domain_stats.refit(all_features, domain_id)  # Call the refit method
@@ -58,15 +58,17 @@ def get_argparse():
                         help="learning rate scheduler policy")
     ## tracker args
     parser.add_argument('--domain_tracker', help='Which domain stats tracker to use', type=str, default='offline_cosine_muvar')
-    parser.add_argument('--mul_layers', help='Are we extracting multi layer features', action='store_true')
     parser.add_argument('--avg_tokens', help='Average token features instead of leaving them flat (i.e token_dim * n_tokens)', action='store_true')
-    parser.add_argument('--num_layers', help='Number of layers to extract features from if mul_layers=True', type=int, default=4)
+    parser.add_argument('--num_layers', help='Number of layers to extract features from', type=int, default=4)
+    ### GMM args
+    parser.add_argument('--gmm_num_components', help='Number of components for GMM tracker', type=int, default=3)
+    parser.add_argument('--gmm_covariance_type', help='Covariance type for GMM', type=str, default='diag', 
+                        choices=['full', 'tied', 'diag', 'spherical'])
     ### test time eval args
     parser.add_argument('--batch_agg_type', type=str, default='pre_similarity', 
                       choices=['pre_similarity', 'post_similarity'], 
                       help='How to aggregate batch features: pre_similarity averages features before computing similarities, post_similarity computes similarities per sample then averages')
     parser.add_argument('--log_similarities', help='Log similarity weights during evaluation', action='store_true')
-    ### offline cos mu var args
     parser.add_argument('--inv_temp', help='1 / T for offline cos mu var', type=float, default=2.0)
 
     # misc args
@@ -109,8 +111,8 @@ def main():
         domain_stats = OnlineGMMTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
         log_file.info('Using Online GMM Tracker')
     elif args.domain_tracker == 'offline_gmm':
-        domain_stats = OfflineGMMTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
-        log_file.info('Using Offline GMM Tracker')
+        domain_stats = OfflineGMMTracker(args)
+        log_file.info(f'Using Offline GMM Tracker with {args.gmm_num_components} components and {args.gmm_covariance_type} covariance')
     elif args.domain_tracker == 'offline_mahalanobis':
         domain_stats = OfflineMahalanobisTracker(feature_dim=768, num_domains=len(dataobj.train_domain_list))
         log_file.info('Using Offline Mahalanobis Tracker')

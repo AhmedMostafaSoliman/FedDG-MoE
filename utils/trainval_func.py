@@ -180,7 +180,7 @@ def feddgmoe_testsite_eval(epochs, site_name, args, model, dataloader, log_file,
     with torch.no_grad():
         for imgs, labels, domain_labels, in tqdm(dataloader):
             imgs = imgs.cuda()
-            intermediate_features = feats_extractor(imgs.cuda(), model[0], mul_layers=args.mul_layers, avg_tokens=args.avg_tokens, num_layers=args.num_layers)
+            intermediate_features = feats_extractor(imgs.cuda(), model[0], avg_tokens=args.avg_tokens, num_layers=args.num_layers)
             
             # Calculate domain similarities based on the aggregation type (raw scores - no softmax yet)
             if args.batch_agg_type == "pre_similarity":

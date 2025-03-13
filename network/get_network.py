@@ -5,21 +5,20 @@ import timm
 import torch
 
 
-def feats_extractor(x, featurizer, mul_layers=False, avg_tokens=False, num_layers=4):
+def feats_extractor(x, featurizer, avg_tokens=False, num_layers=4):
     """
     Extract features from a featurizer, ensuring output shape is always [batch_size, feature_dim]
     
     Args:
         x: Input tensor
         featurizer: Feature extractor model
-        mul_layers: Whether to extract from multiple layers
         avg_tokens: Whether to average token features
         num_layers: Number of layers to extract from if mul_layers=True
         
     Returns:
         Tensor of shape [batch_size, feature_dim]
     """
-    if mul_layers:
+    if num_layers > 1:
         intermediate_features = featurizer.get_intermediate_layers(
             x,
             n=num_layers,
