@@ -60,6 +60,7 @@ def get_argparse():
     parser.add_argument('--domain_tracker', help='Which domain stats tracker to use', type=str, default='offline_cosine_muvar')
     parser.add_argument('--avg_tokens', help='Average token features instead of leaving them flat (i.e token_dim * n_tokens)', action='store_true')
     parser.add_argument('--num_layers', help='Number of layers to extract features from', type=int, default=4)
+    parser.add_argument('--mul_layers', help='does nothing just for backward comp', action='store_true')
     ### GMM args
     parser.add_argument('--gmm_num_components', help='Number of components for GMM tracker', type=int, default=3)
     parser.add_argument('--gmm_covariance_type', help='Covariance type for GMM', type=str, default='diag', 
