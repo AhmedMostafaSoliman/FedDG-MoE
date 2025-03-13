@@ -100,7 +100,7 @@ def feats_extractor(x, featurizer, avg_tokens=False, num_layers=4):
             intermediate_features = featurizer.get_intermediate_layers(
                 x,
                 n=num_layers,
-                return_prefix_tokens=False,
+                return_prefix_tokens=True,
                 norm=True
             )
         except:
