@@ -3,6 +3,82 @@ import torch.nn as nn
 from utils.lora_util import inject_trainable_moe_kronecker_new
 import timm
 import torch
+from typing import Union, List, Tuple
+
+
+def my_get_intermediate_layers(
+        featurizer,
+        x: torch.Tensor,
+        n: Union[int, List[int], Tuple[int]] = 1,
+        return_prefix_tokens: bool = False,
+        norm: bool = False,
+):
+    """
+    Extract intermediate layers from a Vision Transformer model
+    Adapted From timm's get_intermediate_layers function
+    
+    Args:
+        featurizer: The ViT model to extract features from
+        x: Input tensor
+        n: Take last n blocks if int, all if None, select matching indices if sequence
+        return_prefix_tokens: Return both prefix and spatial intermediate tokens
+        norm: Apply norm layer to all intermediates
+        
+    Returns:
+        List of intermediate features, optionally tuples of (spatial_tokens, prefix_tokens)
+    """
+    # Helper function to determine which indices to take
+    def feature_take_indices(num_blocks, indices):
+        if indices is None:
+            take_indices = list(range(num_blocks))
+            max_index = num_blocks - 1
+        elif isinstance(indices, int):
+            take_indices = list(range(num_blocks))[-indices:]
+            max_index = num_blocks - 1
+        else:
+            take_indices = [i for i in indices if i < num_blocks]
+            max_index = max(take_indices) if take_indices else 0
+        return take_indices, max_index
+    
+    intermediates = []
+    take_indices, max_index = feature_take_indices(len(featurizer.blocks), n)
+    
+    # forward pass
+    B, _, height, width = x.shape
+    x = featurizer.patch_embed(x)
+    
+    # Apply positional embedding
+    if hasattr(featurizer, '_pos_embed'):
+        x = featurizer._pos_embed(x)
+    elif hasattr(featurizer, 'pos_embed'):
+        x = x + featurizer.pos_embed
+        
+    if hasattr(featurizer, 'patch_drop'):
+        x = featurizer.patch_drop(x)
+    
+    if hasattr(featurizer, 'norm_pre'):
+        x = featurizer.norm_pre(x)
+    
+    # Process through blocks and collect intermediates
+    blocks = featurizer.blocks[:max_index + 1]
+    for i, blk in enumerate(blocks):
+        x = blk(x)
+        if i in take_indices:
+            # normalize intermediates with final norm layer if enabled
+            intermediates.append(featurizer.norm(x) if norm else x)
+    
+    # process intermediates
+    num_prefix_tokens = getattr(featurizer, 'num_prefix_tokens', 1)  # Default to 1 (cls token)
+    
+    if return_prefix_tokens:
+        # split prefix (e.g. class, distill) and spatial feature tokens
+        prefix_tokens = [y[:, 0:num_prefix_tokens] for y in intermediates]
+        spatial_tokens = [y[:, num_prefix_tokens:] for y in intermediates]
+        # Return as list of tuples (spatial_tokens, prefix_tokens)
+        return list(zip(spatial_tokens, prefix_tokens))
+    
+    # If not returning prefix tokens, just return intermediates
+    return intermediates
 
 
 def feats_extractor(x, featurizer, avg_tokens=False, num_layers=4):
@@ -19,12 +95,23 @@ def feats_extractor(x, featurizer, avg_tokens=False, num_layers=4):
         Tensor of shape [batch_size, feature_dim]
     """
     if num_layers > 1:
-        intermediate_features = featurizer.get_intermediate_layers(
-            x,
-            n=num_layers,
-            return_prefix_tokens=True,
-            norm=True
-        )        
+        try:
+            # Attempt to extract intermediate features using timm's get_intermediate_layers
+            intermediate_features = featurizer.get_intermediate_layers(
+                x,
+                n=num_layers,
+                return_prefix_tokens=True,
+                norm=True
+            )
+        except:
+            # If failed, use our custom implementation
+            intermediate_features = my_get_intermediate_layers(
+                featurizer,
+                x,
+                n=num_layers,
+                return_prefix_tokens=True,
+                norm=True
+            )        
         layers = []
         for spatial_tokens, prefix_tokens in intermediate_features:
             all_tokens = torch.cat([prefix_tokens, spatial_tokens], dim=1)
