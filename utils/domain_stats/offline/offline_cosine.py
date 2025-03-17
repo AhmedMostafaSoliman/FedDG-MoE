@@ -181,3 +181,96 @@ class OfflineCosineMuVarTracker:
 
         # Return raw similarities - no softmax applied
         return similarities
+
+class OfflineCosineConcat:
+    def __init__(self, args):
+        """
+        Initialize offline domain statistics tracker that concatenates 
+        mean and variance vectors before computing cosine similarity.
+        
+        Args:
+            args: Arguments containing site_list for num_domains
+        """
+        self.num_domains = len(args.site_list)
+        self.feature_dim = None  # Will be determined from first batch
+        self.means = None  # Will be initialized on first fit
+        self.vars = None   # Will be initialized on first fit
+        self.fitted = [False] * self.num_domains  # Flag
+
+    def refit(self, features, domain_id):
+        """
+        Refit the mean (centroid) and variance from scratch.
+        Assumes features are already in shape [batch_size, feature_dim]
+
+        Args:
+            features: All features for this domain, shape [batch_size, feature_dim]
+            domain_id: Domain identifier.
+        """
+        with torch.no_grad():
+            if not features.is_cuda:
+                features = features.cuda()
+            
+            # First fit - determine dimensions and initialize storage
+            if self.means is None:
+                self.feature_dim = features.shape[1]
+                self.means = torch.zeros(self.num_domains, self.feature_dim).cuda()
+                self.vars = torch.ones(self.num_domains, self.feature_dim).cuda()
+            
+            # Calculate mean
+            self.means[domain_id] = torch.mean(features, dim=0)
+            # Calculate variance
+            self.vars[domain_id] = torch.var(features, dim=0, unbiased=True)
+            # Ensure numerical stability
+            self.vars[domain_id] = torch.clamp(self.vars[domain_id], min=1e-5)
+            self.fitted[domain_id] = True
+
+    def get_domain_weights(self, features):
+        """
+        Compute raw domain similarities by concatenating mean and variance vectors.
+        First computes mean and variance of the input features (batch),
+        then compares them with domain statistics.
+        
+        Args:
+            features: Input features of shape [batch_size, feature_dim]
+            
+        Returns:
+            Raw similarity scores without softmax normalization
+        """
+        if self.means is None:
+            raise RuntimeError("Tracker not fitted. Call refit() first.")
+            
+        if not features.is_cuda:
+            features = features.cuda()
+                
+        batch_size = features.size(0)
+        
+        # Compute mean and variance of input features batch
+        feature_mean = torch.mean(features, dim=0)
+        feature_var = torch.var(features, dim=0, unbiased=True)
+        feature_var = torch.clamp(feature_var, min=1e-5)
+        
+        # Concatenate mean and variance of input features
+        feature_concat = torch.cat([feature_mean, feature_var])
+        
+        # Initialize similarities tensor
+        similarities = torch.zeros(batch_size, self.num_domains).cuda()
+        
+        for domain_id in range(self.num_domains):
+            if self.fitted[domain_id]:
+                # Concatenate mean and variance of domain
+                domain_concat = torch.cat([self.means[domain_id], self.vars[domain_id]])
+                
+                # Compute cosine similarity between concatenated vectors - just once
+                sim_value = F.cosine_similarity(
+                    feature_concat.unsqueeze(0),
+                    domain_concat.unsqueeze(0),
+                    dim=1
+                )
+                
+                # Assign the same similarity to all samples in the batch
+                similarities[:, domain_id] = sim_value.item() * torch.ones(batch_size).cuda()
+            else:
+                similarities[:, domain_id] = torch.zeros(batch_size).cuda()
+
+        # Return raw similarities - no softmax applied
+        return similarities

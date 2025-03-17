@@ -159,7 +159,7 @@ def SaveCheckPoint(args, model, epochs, path, optimizer=None, schedule=None, not
         
     torch.save(check_dict, os.path.join(path, note+'.pt'))
 
-def feddgmoe_testsite_eval(epochs, site_name, args, model, dataloader, log_file, log_ten, metric, note='after_fed', model_dict=None, domain_stats=None):
+def feddgmoe_testsite_eval(epochs, site_name, args, model, dataloader, log_file, log_ten, metric, note='after_fed', model_dict=None, domain_stats=None, weight_dict=None):
     """
     Unified test site evaluation function for FedDG-MoE.
     
@@ -175,6 +175,7 @@ def feddgmoe_testsite_eval(epochs, site_name, args, model, dataloader, log_file,
         note: Note for logging
         model_dict: Dictionary of domain-specific models
         domain_stats: Domain statistics tracker
+        weight_dict: Dictionary with domain weights based on dataset sizes, used as prior
     """
     model.eval()
     with torch.no_grad():
@@ -194,8 +195,19 @@ def feddgmoe_testsite_eval(epochs, site_name, args, model, dataloader, log_file,
             # First average the raw similarities across the batch
             batch_similarities = torch.mean(similarities, dim=0)
             
-            # Now apply softmax with temperature scaling to the batch-averaged similarities
-            batch_similarities = F.softmax(batch_similarities * args.inv_temp, dim=0)
+            # Apply prior distribution if enabled
+            if args.use_prior and weight_dict is not None:
+                # Convert weight_dict to tensor in the same order as site_list
+                prior_weights = torch.tensor([weight_dict[domain] for domain in args.site_list], device=batch_similarities.device)
+                # Log probabilities to incorporate as prior (equivalent to multiplying probabilities)
+                log_prior = torch.log(prior_weights) * args.prior_strength
+                # Add log prior to the scaled similarities
+                batch_similarities = batch_similarities * args.inv_temp + log_prior
+                # Apply softmax to get final probabilities
+                batch_similarities = F.softmax(batch_similarities, dim=0)
+            else:
+                # Original behavior: just apply temperature scaling and softmax
+                batch_similarities = F.softmax(batch_similarities * args.inv_temp, dim=0)
             
             # Optional logging of similarities
             if args.log_similarities:

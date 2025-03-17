@@ -17,7 +17,7 @@ from utils.domain_stats.online.online_gaussian import OnlineGaussianTracker
 
 from utils.domain_stats.offline.offline_gmm import OfflineGMMTracker
 from utils.domain_stats.offline.offline_mahalanobis import OfflineMahalanobisTracker
-from utils.domain_stats.offline.offline_cosine import OfflineCosineTracker, OfflineCosineMuVarTracker
+from utils.domain_stats.offline.offline_cosine import OfflineCosineTracker, OfflineCosineMuVarTracker, OfflineCosineConcat
 
 def collect_online_stats(model, dataloader, domain_stats, domain_id, args):
     """
@@ -57,7 +57,10 @@ def get_argparse():
     parser.add_argument("--lr_policy", type=str, default='step', choices=['step'],
                         help="learning rate scheduler policy")
     ## tracker args
-    parser.add_argument('--domain_tracker', help='Which domain stats tracker to use', type=str, default='offline_cosine_muvar')
+    parser.add_argument('--domain_tracker', help='Which domain stats tracker to use', type=str, default='offline_cosine_muvar',
+                       choices=['offline_cosine_muvar', 'offline_cosine', 'offline_mahalanobis', 
+                               'offline_gmm', 'offline_cosine_concat',
+                               'online_cosine', 'online_gaussian', 'online_gmm'])
     parser.add_argument('--avg_tokens', help='Average token features instead of leaving them flat (i.e token_dim * n_tokens)', action='store_true')
     parser.add_argument('--num_layers', help='Number of layers to extract features from', type=int, default=4)
     ### GMM args
@@ -70,10 +73,10 @@ def get_argparse():
                       help='How to aggregate batch features: pre_similarity averages features before computing similarities, post_similarity computes similarities per sample then averages')
     parser.add_argument('--log_similarities', help='Log similarity weights during evaluation', action='store_true')
     parser.add_argument('--inv_temp', help='1 / T for offline cos mu var', type=float, default=2.0)
+    parser.add_argument('--use_prior', help='Use weight_dict as prior distribution for similarities', action='store_true')
+    parser.add_argument('--prior_strength', help='Strength of the prior distribution (higher values give more weight to prior)', type=float, default=1.0)
 
     # misc args
-    parser.add_argument('--note', help='note of experimental settings', type=str, default='feddg_moe')
-    parser.add_argument('--display', help='display in controller', action='store_true')
     return parser.parse_args()
 
 def main():
@@ -104,6 +107,9 @@ def main():
     elif args.domain_tracker == 'offline_cosine_muvar':
         domain_stats = OfflineCosineMuVarTracker(args)
         log_file.info('Using Offline Cosine MuVar Tracker')
+    elif args.domain_tracker == 'offline_cosine_concat':
+        domain_stats = OfflineCosineConcat(args)
+        log_file.info('Using Offline Cosine Concat Tracker')
     elif args.domain_tracker == 'online_cosine':
         domain_stats = OnlineCosineTracker(num_domains=len(dataobj.train_domain_list))
         log_file.info('Using Online Cosine Tracker')
@@ -158,7 +164,8 @@ def main():
             log_file.info(f'Model saved! Best Val Acc: {best_val*100:.2f}%')
     
         feddgmoe_testsite_eval(i, args.test_domain, args, global_model, dataloader_dict[args.test_domain]['test'], 
-                         log_file, log_ten, metric, note='test_domain', model_dict=model_dict, domain_stats=domain_stats)
+                         log_file, log_ten, metric, note='test_domain', model_dict=model_dict, domain_stats=domain_stats,
+                         weight_dict=weight_dict)
         
     SaveCheckPoint(args, global_model, args.comm, os.path.join(log_dir, 'checkpoints'), note='last_model')
     for domain_name in dataobj.train_domain_list: 
