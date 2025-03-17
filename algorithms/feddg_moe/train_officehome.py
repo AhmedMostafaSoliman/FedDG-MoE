@@ -77,6 +77,8 @@ def get_argparse():
     parser.add_argument('--prior_strength', help='Strength of the prior distribution (higher values give more weight to prior)', type=float, default=1.0)
 
     # misc args
+    parser.add_argument('--note', help='note of experimental settings', type=str, default='feddg_moe')
+    parser.add_argument('--display', help='display in controller', action='store_true')
     return parser.parse_args()
 
 def main():
