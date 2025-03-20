@@ -44,7 +44,8 @@ class PACS_SingleDomain():
         
         self.root_path = os.path.join(root_path, 'raw_images')
         self.split = split
-        self.split_file = os.path.join(root_path, 'raw_images', 'Train val splits and h5py files pre-read', f'{self.domain_name}_{split_dict[self.split]}_kfold' + '.txt')
+        #self.split_file = os.path.join(root_path, 'raw_images', 'Train val splits and h5py files pre-read', f'{self.domain_name}_{split_dict[self.split]}_kfold' + '.txt')
+        self.split_file = os.path.join(root_path, 'split_files', f'{self.domain_name}_{split_dict[self.split]}_kfold' + '.txt')
         
         if train_transform is not None:
             self.transform = train_transform
@@ -68,8 +69,9 @@ class PACS_SingleDomain():
         return imgs, labels
     
 class PACS_FedDG():
-    def __init__(self, test_domain='p', batch_size=16):
+    def __init__(self, test_domain='p', batch_size=16, test_batch_size=32):
         self.batch_size = batch_size
+        self.test_batch_size = test_batch_size
         self.domain_list = list(pacs_name_dict.keys())
         self.test_domain = test_domain
         self.train_domain_list = self.domain_list.copy()
@@ -78,7 +80,11 @@ class PACS_FedDG():
         self.site_dataset_dict = {}
         self.site_dataloader_dict = {}
         for domain_name in self.domain_list:
-            self.site_dataloader_dict[domain_name], self.site_dataset_dict[domain_name] = PACS_FedDG.SingleSite(domain_name, self.batch_size)
+            self.site_dataloader_dict[domain_name], self.site_dataset_dict[domain_name] = PACS_FedDG.SingleSite(
+                domain_name, 
+                self.batch_size, 
+                self.test_batch_size if domain_name == self.test_domain else self.batch_size
+            )
             
         
         self.test_dataset = self.site_dataset_dict[self.test_domain]['test']
@@ -86,18 +92,27 @@ class PACS_FedDG():
         
           
     @staticmethod
-    def SingleSite(domain_name, batch_size=16):
+    def SingleSite(domain_name, batch_size=16, test_batch_size=None):
+        if test_batch_size is None:
+            test_batch_size = batch_size
+            
         dataset_dict = {
             'train': PACS_SingleDomain(domain_name=domain_name, split='train', train_transform=transform_train).dataset,
             'val': PACS_SingleDomain(domain_name=domain_name, split='val').dataset,
             'test': PACS_SingleDomain(domain_name=domain_name, split='total').dataset,
         }
-        dataloader_dict = GetDataLoaderDict(dataset_dict, batch_size)
+        
+        dataloader_dict = {
+            'train': torch.utils.data.DataLoader(dataset_dict['train'], batch_size=batch_size, shuffle=True),
+            'val': torch.utils.data.DataLoader(dataset_dict['val'], batch_size=batch_size, shuffle=False),
+            'test': torch.utils.data.DataLoader(dataset_dict['test'], batch_size=test_batch_size, shuffle=False)
+        }
+        
         return dataloader_dict, dataset_dict
         
     def GetData(self):
         return self.site_dataloader_dict, self.site_dataset_dict
-    
+
 
 
 
