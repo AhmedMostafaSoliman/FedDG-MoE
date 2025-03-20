@@ -73,6 +73,7 @@ def get_argparse():
                       help='How to aggregate batch features: pre_similarity averages features before computing similarities, post_similarity computes similarities per sample then averages')
     parser.add_argument('--log_similarities', help='Log similarity weights during evaluation', action='store_true')
     parser.add_argument('--inv_temp', help='1 / T for offline cos mu var', type=float, default=2.0)
+    parser.add_argument('--normalize_features', help='Normalize features by std dev in cosine muvar tracker', action='store_true', default=True)
     parser.add_argument('--use_prior', help='Use weight_dict as prior distribution for similarities', action='store_true')
     parser.add_argument('--prior_strength', help='Strength of the prior distribution (higher values give more weight to prior)', type=float, default=1.0)
 

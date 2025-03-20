@@ -105,13 +105,15 @@ class OfflineCosineMuVarTracker:
         We divide the mean by the variance to down-weight features that are not stable within a domain
         
         Args:
-            args: Arguments containing site_list for num_domains
+            args: Arguments containing site_list for num_domains and normalize_features option
         """
         self.num_domains = len(args.site_list)
         self.feature_dim = None  # Will be determined from first batch
         self.means = None  # Will be initialized on first fit
         self.vars = None   # Will be initialized on first fit
         self.fitted = [False] * self.num_domains  # Flag
+        # Whether to normalize features by standard deviation or use them as-is
+        self.normalize_features = getattr(args, 'normalize_features', True)
 
     def refit(self, features, domain_id):
         """
@@ -144,7 +146,7 @@ class OfflineCosineMuVarTracker:
         """
         Compute raw domain similarities considering both mean and variance.
         Features are normalized by the domain's standard deviation before
-        computing cosine similarity.
+        computing cosine similarity if normalize_features is True.
         
         Args:
             features: Input features of shape [batch_size, feature_dim]
@@ -165,8 +167,11 @@ class OfflineCosineMuVarTracker:
             if self.fitted[domain_id]:
                 domain_std = torch.sqrt(self.vars[domain_id])
 
-                # Normalize features by the standard deviation
-                normalized_features = features / (domain_std + 1e-5)   
+                # Normalize features by the standard deviation if enabled
+                if self.normalize_features:
+                    normalized_features = features / (domain_std + 1e-5)
+                else:
+                    normalized_features = features   
 
                 # Normalize mean by the standard deviation           
                 normalized_mean = self.means[domain_id] / (domain_std + 1e-5)           
