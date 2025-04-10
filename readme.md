@@ -37,6 +37,7 @@ Part of our code is borrowed from the following repositories.
 - FedDG-GA [https://github.com/MediaBrain-SJTU/FedDG-GA]
 - FACT [https://github.com/MediaBrain-SJTU/FACT]
 - DomainBed [https://github.com/facebookresearch/DomainBed]
+- MoA [https://github.com/cvlab-kaist/MoA]
 - SCAFFOLD-PyTorch [https://github.com/KarhouTam/SCAFFOLD-PyTorch]
 
 We thank to the authors for releasing their codes. Please also consider citing their works.
