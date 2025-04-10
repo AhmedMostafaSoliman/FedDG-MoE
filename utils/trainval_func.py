@@ -126,6 +126,8 @@ def GetFedModel(args, num_classes, is_train=True):
         domain_list = domainNet_domain_list
     elif args.dataset == 'terrainc':
         domain_list = terra_incognita_list
+    elif args.dataset == 'vlcs':
+        domain_list = vlcs_domain_list
         
     for domain_name in domain_list:
         model_dict[domain_name], _ = GetNetwork(args, num_classes, is_train)
